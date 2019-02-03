@@ -1,3 +1,5 @@
+#ifndef VEC3_H
+#define VEC3_H
 #include <iostream>
 class vec3 {
     public:
@@ -25,3 +27,4 @@ class vec3 {
 };
 
 std::ostream &operator<<(std::ostream &output, const vec3 &v);
+#endif
