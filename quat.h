@@ -5,11 +5,11 @@
 
 class quat {
 public:
-    double w, x, y, z;
+    scalar w, x, y, z;
 public:
-    quat(double w, double x, double y, double z);
-    quat(double x, double y, double z);
-    quat(double w, vec3 vec);
+    quat(scalar w, scalar x, scalar y, scalar z);
+    quat(scalar x, scalar y, scalar z);
+    quat(scalar w, vec3 vec);
     quat(vec3 vec);
     quat();
 
@@ -17,7 +17,7 @@ public:
 
     quat conjugate() const;
 
-    static quat from_angleaxis(double angle, vec3 axis);
+    static quat from_angleaxis(scalar angle, vec3 axis);
 };
 
 quat operator*(const quat &, const quat &);

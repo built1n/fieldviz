@@ -9,7 +9,7 @@ using namespace std;
 
 class Curve {
 public:
-    virtual vec3 integrate(vec3 (*integrand)(vec3 s, vec3 ds), double delta) = 0;
+    virtual vec3 integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar delta) const = 0;
 };
 
 class LineSegment : Curve {
@@ -18,7 +18,7 @@ private:
 public:
     LineSegment(vec3 a_, vec3 b_) : a(a_), b(b_) {};
 
-    vec3 integrate(vec3 (*integrand)(vec3 s, vec3 ds), double delta);
+    vec3 integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar delta) const;
 };
 
 class Arc : Curve {
@@ -30,11 +30,11 @@ private:
     vec3 radius, normal;
 
     /* how many radians the arc extends for (can be greater than 2pi) */
-    double angle;
+    scalar angle;
 public:
-    Arc(vec3 c_, vec3 r_, vec3 n_, double th) : center(c_), radius(r_), normal(n_), angle(th) {};
+    Arc(vec3 c_, vec3 r_, vec3 n_, scalar th) : center(c_), radius(r_), normal(n_), angle(th) {};
 
-    vec3 integrate(vec3 (*integrand)(vec3 s, vec3 ds), double delta);
+    vec3 integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar delta) const;
 };
 
 class Spiral : Curve {
@@ -46,13 +46,37 @@ private:
     vec3 radius, normal;
 
     /* how many radians the arc extends for (can be greater than 2pi) */
-    double angle;
+    scalar angle;
 
-    /* space between turns (2pi) */
-    double pitch;
+    /* linear distance between turns (2pi) */
+    scalar pitch;
 public:
-    Spiral(vec3 c_, vec3 r_, vec3 n_, double th, double p) : origin(c_), radius(r_), normal(n_), angle(th), pitch(p) {};
+    Spiral(vec3 c_, vec3 r_, vec3 n_, scalar th, scalar p) : origin(c_), radius(r_), normal(n_), angle(th), pitch(p) {};
 
-    vec3 integrate(vec3 (*integrand)(vec3 s, vec3 ds), double delta);
+    vec3 integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar delta) const;
+};
+
+class Toroid : Curve {
+private:
+    vec3 origin;
+
+    /* these are relative to the center (direction will be determined
+     * by RHR of normal), and should be orthonormal */
+    vec3 major_radius, major_normal;
+
+    /* "thickness" of toroid */
+    scalar minor_r;
+    
+    /* how many radians (about the center) the toroid extends for
+     * (can be greater than 2pi) */
+    scalar major_angle;
+
+    /* central angle between successive turns (2pi rotation of small
+     * radius vector) */
+    scalar pitch;
+public:
+    Toroid(vec3 o, vec3 maj_r, vec3 maj_n, scalar ang, scalar min_r, scalar p) : origin(o), major_radius(maj_r), major_normal(maj_n), major_angle(ang), minor_r(min_r), pitch(p) {};
+
+    vec3 integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar delta) const;
 };
 #endif
