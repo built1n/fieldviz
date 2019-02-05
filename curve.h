@@ -75,6 +75,7 @@ private:
      * radius vector) */
     scalar pitch;
 public:
+    Toroid() {};
     Toroid(vec3 o, vec3 maj_r, vec3 maj_n, scalar ang, scalar min_r, scalar p) : origin(o), major_radius(maj_r), major_normal(maj_n), major_angle(ang), minor_r(min_r), pitch(p) {};
 
     vec3 integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar delta) const;

@@ -120,8 +120,10 @@ vec3 Toroid::integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar dl) const
     scalar major_r = this->major_radius.magnitude();
 
     /* how far parallel to the major median each dl takes us */
-    scalar dpar = this->pitch * dl / (2 * M_PI * minor_r) * major_r;
-    
+    scalar pitch_length = this->pitch * major_r;
+
+    scalar dpar = this->pitch * dl / (2 * M_PI * sqrt(minor_r * minor_r + pitch_length * pitch_length)) * major_r;
+
     /* how far each dl rotates the major vector */
     scalar major_dtheta = dpar / major_r;
 
@@ -144,6 +146,12 @@ vec3 Toroid::integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar dl) const
     quat major_radius = this->major_radius;
     quat minor_radius = this->major_radius.normalize() * this->minor_r;
 
+    //cout << "minor_dtheta = " << minor_dtheta << endl;
+    //cout << "minor_dper = " << dper << endl;
+    //cout << "dl = " << dl << endl;
+    //cout << "dpar = " << dpar << endl;
+    //cout << "pitch = " << this->pitch << endl;
+
     for(scalar theta = 0; theta < this->major_angle; theta += major_dtheta)
     {
         vec3 dpar_vec = minor_normal * dpar;
@@ -157,11 +165,16 @@ vec3 Toroid::integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar dl) const
          * about the origin */
         major_radius = major_rot * major_radius * major_crot;
         minor_normal = major_rot * minor_normal * major_crot;
-            
+
         minor_radius = minor_rot * minor_radius * minor_crot;
 
-        minor_rot = minor_rot * major_rot;
+        minor_rot = quat::from_angleaxis(minor_dtheta, minor_normal);
         minor_crot = minor_rot.conjugate();
+        //minor_rot = major_rot * minor_rot;
+        //minor_crot = minor_rot.conjugate();
+
+        //cout << "Minor radius is " << minor_radius << endl;
+        //cout << "Minor rot quat is " << minor_rot << endl;
     }
 
 #if 0

@@ -34,15 +34,15 @@ vec3 dB(vec3 s, vec3 ds)
 //Arc loop(vec3(0, 0, 0), vec3(0, 1, 0), vec3(1, 0, 0), M_PI * 2);
 //Spiral loop(vec3(0, 0, 0), vec3(0, 1, 0), vec3(1, 0, 0), M_PI * 2 * 10, 1);
 //LineSegment loop(vec3(-.1, .1, 0), vec3(.1, .1, 0));
-Toroid loop(vec3(0, 0, 0), vec3(1, 0, 0), vec3(0, 0, 1), M_PI * 2, .1, 2*M_PI / 10);
+Toroid loop;
 
 ostream *dump_ofs = NULL;
 
 vec3 dump(vec3 s, vec3 ds)
 {
-    *dump_ofs << s << endl;
+    *dump_ofs << s << " " << ds << endl;
     //cout << "Magn: " << ds.magnitude() << endl;
-        
+
     return 0;
 }
 
@@ -57,9 +57,8 @@ void dump_path(ostream &out, const Curve *c)
 
 const scalar U0 = 4e-7 * M_PI;
 const scalar I = 1;
-const scalar delta = .2;
 
-void dump_field(scalar x0, scalar y0, scalar z0, scalar x1, scalar y1, scalar z1)
+void dump_field(scalar x0, scalar y0, scalar z0, scalar x1, scalar y1, scalar z1, scalar delta)
 {
     for(scalar z = z0; z <= z1; z += delta)
         for(scalar y = y0; y <= y1; y += delta)
@@ -93,8 +92,13 @@ void dump_fieldline(ostream &out, vec3 x, scalar len)
     }
 }
 
-int main()
+int main(int argc, char *argv[])
 {
+    if(argc != 2)
+        return 1;
+    loop = Toroid(vec3(0, 0, 0), vec3(1, 0, 0), vec3(0, 0, 1), 1 * M_PI, .1, atof(argv[1]));
+    
+    
     //LineSegment wire(vec3(0, -100, 0), vec3(0, 100, 0));
 
     //std::cout << "length = " << loop.integrate(integrand, 1e-2) << endl;
@@ -108,17 +112,18 @@ int main()
     //for(int i = 0; i < 1000; i++, point += dx)
     //std::cout << point[0] << " " << U0 / ( 4 * M_PI ) * loop.integrate(dB, 1e-2)[0] << endl;
     
-    dump_field(-2, -2, 0,
-                12, 2, 0);
+    //dump_field(-2, -2, 0,
+//             2, 2, 0,
+    //.1);
     //dump_field(0,0,0,0,0,0);
 
-    stringstream ss;
-    ss << "curve.fld";
-    ofstream ofs(ss.str());
+    //stringstream ss;
+    //ss << "curve.fld";
+    //ofstream ofs(ss.str());
 
-    dump_path(ofs, (Curve*)&loop);
+    dump_path(cout, (Curve*)&loop);
     
-    ofs.close();
+    //ofs.close();
     
     
 #if 0
