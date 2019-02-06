@@ -11,19 +11,23 @@
 
 using namespace std;
 
-vec3 integrand(vec3 s, vec3 ds)
-{
-    cout << "point " << s << "ds = " << ds << endl;
+/* A current or charge distribution */
+struct Entity {
+    enum { CHARGE, CURRENT } type;
+    union {
+        double Q_density; /* linear charge density */
+        double I; /* current */
+    };
 
-    return ds;
-}
+    Curve *path;
+};
 
 vec3 point;
 
 /* dl x r / (|r| ^ 2) */
 vec3 dB(vec3 s, vec3 ds)
 {
-    vec3 r = s - point;
+    vec3 r = point - s;
 
     scalar r2 = r.magnitudeSquared();
 
@@ -32,15 +36,67 @@ vec3 dB(vec3 s, vec3 ds)
     return ds.cross(rnorm) / r2;
 }
 
-//Arc loop(vec3(0, 0, 0), vec3(0, 1, 0), vec3(1, 0, 0), M_PI * 2);
-//Spiral loop(vec3(0, 0, 0), vec3(0, 1, 0), vec3(1, 0, 0), M_PI * 2 * 10, 1);
-//LineSegment loop(vec3(-.1, .1, 0), vec3(.1, .1, 0));
-struct Current {
-    double I;
-    Curve *c;
-};
+/* dl * r / (|r| ^ 2) */
+vec3 dE(vec3 s, vec3 ds)
+{
+    vec3 r = point - s;
 
-vector<Curve> currents;
+    scalar r2 = r.magnitudeSquared();
+
+    vec3 rnorm = r / std::sqrt(r2);
+
+    return rnorm * ds.magnitude() / r2;
+}
+
+vector<Entity> entities;
+
+void add_current(scalar I, Curve *path)
+{
+    Entity n = { Entity::CURRENT, .I = I, .path = path };
+    entities.push_back(n);
+}
+
+void add_charge(scalar Q_density, Curve *path)
+{
+    Entity n = { Entity::CHARGE, .Q_density = Q_density, .path = path };
+    entities.push_back(n);
+}
+
+const scalar U0 = 4e-7 * M_PI;
+const scalar C = 299792458;
+const scalar E0 = 1 / ( U0 * C * C );
+const scalar K_E = 1 / (4 * M_PI * E0);
+const scalar D = 1e-1;
+
+vec3 calc_Bfield(vec3 x)
+{
+    point = x;
+
+    vec3 B = 0;
+
+    for(int i = 0; i < entities.size(); i++)
+    {
+        if(entities[i].type == Entity::CURRENT)
+            B += entities[i].path->integrate(dB, D) * U0 * entities[i].I;
+    }
+
+    return B;
+}
+
+vec3 calc_Efield(vec3 x)
+{
+    point = x;
+
+    vec3 E = 0;
+
+    for(int i = 0; i < entities.size(); i++)
+    {
+        if(entities[i].type == Entity::CHARGE)
+            E += entities[i].path->integrate(dE, D) * K_E * entities[i].Q_density;
+    }
+
+    return E;
+}
 
 ostream *dump_ofs = NULL;
 
@@ -52,47 +108,45 @@ vec3 dump(vec3 s, vec3 ds)
     return 0;
 }
 
-void dump_path(ostream &out, const Curve *c)
+void dump_path(ostream &out, Curve *c)
 {
     dump_ofs = &out;
-    c->integrate(dump, 1e-2);
+    c->integrate(dump, D);
 }
 
-/* dump the field (gnuplot format) at z = 0 */
-/* requires x0 < x1, y0 < y1 */
-
-const scalar U0 = 4e-7 * M_PI;
-const scalar I = 1;
-
-vec3 calc_Bfield(vec3 x)
+void dump_paths(ostream &out, vector<Entity> &e)
 {
-    point = x;
+    for(int i = 0; i < e.size(); i++)
+    {
+        dump_path(out, e[i].path);
 
-    vec3 B = 0;
-
-    for(int i = 0; i < currents.size(); i++)
-        B += currents[i].integrate(dB, 1e-1) * U0 * I;
+        /* two blank lines mark an index in gnuplot */
+        out << endl << endl;
+    }
 }
 
-void dump_field(scalar x0, scalar y0, scalar z0, scalar x1, scalar y1, scalar z1, scalar delta)
+/* dump the field vectors with a spacing of `delta' */
+/* requires x0 < x1, y0 < y1, z0 < z1 */
+enum FieldType { E, B };
+
+/* dump field in a region of space */
+void dump_field(enum FieldType type,
+                vec3 lower_corner, vec3 upper_corner,
+                scalar delta)
 {
-    for(scalar z = z0; z <= z1; z += delta)
-        for(scalar y = y0; y <= y1; y += delta)
-            for(scalar x = x0; x <= x1; x += delta)
+    for(scalar z = lower_corner[2]; z <= upper_corner[2]; z += delta)
+        for(scalar y = lower_corner[1]; y <= upper_corner[1]; y += delta)
+            for(scalar x = lower_corner[0]; x <= upper_corner[0]; x += delta)
             {
-                point = vec3(x, y, z);
+                vec3 pt(x, y, z);
+                vec3 field = (type == E) ? calc_Efield(pt) : calc_Bfield(pt);
 
-                vec3 B = loop.integrate(dB, 1e-1) * U0 * I;
-
-                if(B.magnitude() > 1e-8)
-                {
-                    B=B.normalize() / 10;
-                    cout << point[0] << " " << point[1] << " " << point[2] << " ";
-                    cout << B[0] << " " << B[1] << " " << B[2] << endl;
-                }
+                field = field.normalize() / 10;
+                cout << pt << " " << field << endl;
             }
 }
 
+/* trace a field line */
 void dump_fieldline(ostream &out, vec3 x, scalar len)
 {
     point = x;
@@ -100,11 +154,23 @@ void dump_fieldline(ostream &out, vec3 x, scalar len)
     while(len > 0)
     {
         out << point << endl;
-        
-        vec3 B = loop.integrate(dB, 1e-1) * U0 * I;
+
+        vec3 B = calc_Bfield(point);
 
         point += delta * B;
         len -= delta;
+    }
+}
+
+/* dump field magnitudes along a line */
+void dump_values(vec3 start, vec3 del, int times)
+{
+    point = start;
+    while(times--)
+    {
+
+
+        point += del;
     }
 }
 
@@ -112,9 +178,29 @@ int main(int argc, char *argv[])
 {
     if(argc != 2)
         return 1;
-    loop = Toroid(vec3(0, 0, 0), vec3(1, 0, 0), vec3(0, 0, 1), 1 * M_PI, .1, atof(argv[1]));
-    
-    
+
+    Toroid toroid(vec3(0, 0, 0), vec3(1, 0, 0), vec3(0, 0, 1), 2 * M_PI, .1, atof(argv[1]));
+    Spiral solenoid(vec3(-1,0,0), vec3(0,1,0), vec3(1,0,0), 2*M_PI * 10, .2);
+    //LineSegment wire(vec3(0, -10, 0), vec3(0, 10, 0));
+
+    add_charge(1, (Curve*) &toroid);
+    add_current(1, (Curve*) &solenoid);
+    //add_current(1, (Curve*) &wire);
+
+    dump_field(FieldType::E,
+               vec3(-3, -3, -1),
+               vec3(3, 3, 1),
+               .5);
+
+    stringstream ss;
+    ss << "curve.fld";
+    ofstream ofs(ss.str());
+
+    dump_paths(ofs, entities);
+
+    ofs.close();
+
+
     //LineSegment wire(vec3(0, -100, 0), vec3(0, 100, 0));
 
     //std::cout << "length = " << loop.integrate(integrand, 1e-2) << endl;
@@ -127,21 +213,7 @@ int main(int argc, char *argv[])
 
     //for(int i = 0; i < 1000; i++, point += dx)
     //std::cout << point[0] << " " << U0 / ( 4 * M_PI ) * loop.integrate(dB, 1e-2)[0] << endl;
-    
-    //dump_field(-2, -2, 0,
-//             2, 2, 0,
-    //.1);
-    //dump_field(0,0,0,0,0,0);
 
-    //stringstream ss;
-    //ss << "curve.fld";
-    //ofstream ofs(ss.str());
-
-    dump_path(cout, (Curve*)&loop);
-    
-    //ofs.close();
-    
-    
 #if 0
     mkdir("field", 0755);
 
