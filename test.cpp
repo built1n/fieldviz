@@ -31,10 +31,28 @@ vec3 dB(vec3 s, vec3 ds)
     return ds.cross(rnorm) / r2;
 }
 
-//Arc loop(vec3(0, 0, 0), vec3(0, 1, 0), vec3(1, 0, 0), M_PI * 2);
+/* dl * r / (|r| ^ 2) */
+vec3 dE(vec3 s, vec3 ds)
+{
+    vec3 r = point - s;
+
+    scalar r2 = r.magnitudeSquared();
+
+    vec3 rnorm = r / std::sqrt(r2);
+
+    return rnorm * ds.magnitude() / r2;
+}
+
+/* A current or charge distribution */
+struct Entity {
+    enum { CHARGE, CURRENT } type;
+    
+};
+
+Arc loop(vec3(0, 0, 0), vec3(0, 1, 0), vec3(1, 0, 0), M_PI * 2);
 //Spiral loop(vec3(0, 0, 0), vec3(0, 1, 0), vec3(1, 0, 0), M_PI * 2 * 10, 1);
 //LineSegment loop(vec3(-.1, .1, 0), vec3(.1, .1, 0));
-Toroid loop;
+//Toroid loop;
 
 ostream *dump_ofs = NULL;
 
@@ -57,6 +75,10 @@ void dump_path(ostream &out, const Curve *c)
 
 const scalar U0 = 4e-7 * M_PI;
 const scalar I = 1;
+const scalar Q = 1;
+const scalar C = 299792458;
+const scalar E0 = 1 / ( U0 * C * C );
+const scalar K_E = 1 / (4 * M_PI * E0);
 
 void dump_field(scalar x0, scalar y0, scalar z0, scalar x1, scalar y1, scalar z1, scalar delta)
 {
@@ -66,7 +88,7 @@ void dump_field(scalar x0, scalar y0, scalar z0, scalar x1, scalar y1, scalar z1
             {
                 point = vec3(x, y, z);
 
-                vec3 B = loop.integrate(dB, 1e-1) * U0 * I;
+                vec3 B = loop.integrate(dE, 1e-1) * Q * K_E;
 
                 if(B.magnitude() > 1e-8)
                 {
@@ -92,11 +114,22 @@ void dump_fieldline(ostream &out, vec3 x, scalar len)
     }
 }
 
+void dump_values(vec3 start, vec3 del, int times)
+{
+    point = start;
+    while(times--)
+    {
+        
+        
+        point += del;
+    }    
+}
+
 int main(int argc, char *argv[])
 {
-    if(argc != 2)
-        return 1;
-    loop = Toroid(vec3(0, 0, 0), vec3(1, 0, 0), vec3(0, 0, 1), 1 * M_PI, .1, atof(argv[1]));
+    //if(argc != 2)
+        //    return 1;
+    //loop = Toroid(vec3(0, 0, 0), vec3(1, 0, 0), vec3(0, 0, 1), 1 * M_PI, .1, atof(argv[1]));
     
     
     //LineSegment wire(vec3(0, -100, 0), vec3(0, 100, 0));
@@ -112,18 +145,18 @@ int main(int argc, char *argv[])
     //for(int i = 0; i < 1000; i++, point += dx)
     //std::cout << point[0] << " " << U0 / ( 4 * M_PI ) * loop.integrate(dB, 1e-2)[0] << endl;
     
-    //dump_field(-2, -2, 0,
-//             2, 2, 0,
-    //.1);
+   dump_field(-3, -3, 0,
+              3, 3, 0,
+              .1);
     //dump_field(0,0,0,0,0,0);
 
-    //stringstream ss;
-    //ss << "curve.fld";
-    //ofstream ofs(ss.str());
+    stringstream ss;
+    ss << "curve.fld";
+    ofstream ofs(ss.str());
 
-    dump_path(cout, (Curve*)&loop);
+    dump_path(ofs, (Curve*)&loop);
     
-    //ofs.close();
+    ofs.close();
     
     
 #if 0
