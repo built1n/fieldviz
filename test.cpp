@@ -1,9 +1,10 @@
 #include <cmath>
-#include <iostream>
 #include <fstream>
+#include <iostream>
+#include <sstream>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sstream>
+#include <vector>
 
 #include "vec3.h"
 #include "curve.h"
@@ -34,7 +35,12 @@ vec3 dB(vec3 s, vec3 ds)
 //Arc loop(vec3(0, 0, 0), vec3(0, 1, 0), vec3(1, 0, 0), M_PI * 2);
 //Spiral loop(vec3(0, 0, 0), vec3(0, 1, 0), vec3(1, 0, 0), M_PI * 2 * 10, 1);
 //LineSegment loop(vec3(-.1, .1, 0), vec3(.1, .1, 0));
-Toroid loop;
+struct Current {
+    double I;
+    Curve *c;
+};
+
+vector<Curve> currents;
 
 ostream *dump_ofs = NULL;
 
@@ -57,6 +63,16 @@ void dump_path(ostream &out, const Curve *c)
 
 const scalar U0 = 4e-7 * M_PI;
 const scalar I = 1;
+
+vec3 calc_Bfield(vec3 x)
+{
+    point = x;
+
+    vec3 B = 0;
+
+    for(int i = 0; i < currents.size(); i++)
+        B += currents[i].integrate(dB, 1e-1) * U0 * I;
+}
 
 void dump_field(scalar x0, scalar y0, scalar z0, scalar x1, scalar y1, scalar z1, scalar delta)
 {
