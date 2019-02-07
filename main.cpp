@@ -52,13 +52,13 @@ vector<Entity> entities;
 
 void add_current(scalar I, Curve *path)
 {
-    Entity n = { Entity::CURRENT, .I = I, .path = path };
+    Entity n = { Entity::CURRENT, I, path };
     entities.push_back(n);
 }
 
 void add_charge(scalar Q_density, Curve *path)
 {
-    Entity n = { Entity::CHARGE, .Q_density = Q_density, .path = path };
+    Entity n = { Entity::CHARGE, Q_density, path };
     entities.push_back(n);
 }
 
