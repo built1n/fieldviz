@@ -31,4 +31,6 @@ class vec3 {
 vec3 operator*(scalar scale, const vec3 &v);
 
 std::ostream &operator<<(std::ostream &output, const vec3 &v);
+std::istream &operator>>(std::istream &input, vec3 &v);
+
 #endif

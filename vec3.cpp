@@ -88,6 +88,13 @@ std::ostream &operator<<(std::ostream &output, const vec3 &v) {
     return output << v[0] << " " << v[1] << " " << v[2];
 }
 
+std::istream &operator>>(std::istream &input, vec3 &v)
+{
+    if(!(input >> v[0] >> v[1] >> v[2]))
+        throw "error parsing vector";
+    return input;
+}
+
 vec3 operator*(scalar scale, const vec3 &v)
 {
     return v * scale;

@@ -6,6 +6,8 @@
 #include <sys/types.h>
 #include <vector>
 
+#include "gnuplot_i.hpp"
+
 #include "vec3.h"
 #include "curve.h"
 
@@ -15,8 +17,8 @@ using namespace std;
 struct Entity {
     enum { CHARGE, CURRENT } type;
     union {
-        double Q_density; /* linear charge density */
-        double I; /* current */
+        scalar Q_density; /* linear charge density */
+        scalar I; /* current */
     };
 
     Curve *path;
@@ -50,16 +52,21 @@ vec3 dE(vec3 s, vec3 ds)
 
 vector<Entity> entities;
 
-void add_current(scalar I, Curve *path)
+int add_current(scalar I, Curve *path)
 {
     Entity n = { Entity::CURRENT, I, path };
     entities.push_back(n);
+
+    /* index */
+    return entities.size() - 1;
 }
 
-void add_charge(scalar Q_density, Curve *path)
+int add_charge(scalar Q_density, Curve *path)
 {
     Entity n = { Entity::CHARGE, Q_density, path };
     entities.push_back(n);
+
+    return entities.size() - 1;
 }
 
 const scalar U0 = 4e-7 * M_PI;
@@ -129,8 +136,9 @@ void dump_paths(ostream &out, vector<Entity> &e)
 /* requires x0 < x1, y0 < y1, z0 < z1 */
 enum FieldType { E, B };
 
-/* dump field in a region of space */
-void dump_field(enum FieldType type,
+/* dump field in a region of space to vectors */
+void dump_field(ostream &out,
+                enum FieldType type,
                 vec3 lower_corner, vec3 upper_corner,
                 scalar delta)
 {
@@ -142,7 +150,7 @@ void dump_field(enum FieldType type,
                 vec3 field = (type == E) ? calc_Efield(pt) : calc_Bfield(pt);
 
                 field = field.normalize() / 10;
-                cout << pt << " " << field << endl;
+                out << pt << " " << field << endl;
             }
 }
 
@@ -174,32 +182,122 @@ void dump_values(vec3 start, vec3 del, int times)
     }
 }
 
+void all_lower(string &str)
+{
+    for(int i = 0; i < str.length(); i++)
+        str[i] = tolower(str[i]);
+}
+
+Curve *parse_curve(stringstream &ss)
+{
+    string type;
+    ss >> type;
+    if(type == "line" || type == "linesegment")
+    {
+        vec3 a, b;
+        ss >> a >> b;
+        return (Curve*)new LineSegment(a, b);
+    }
+    else if(type == "arc")
+    {
+        vec3 center, radius, normal;
+        scalar angle;
+        ss >> center >> radius >> normal;
+        ss >> angle;
+        return (Curve*)new Arc(center, radius, normal, angle);
+    }
+    else if(type == "spiral" || type == "solenoid")
+    {
+        vec3 origin, radius, normal;
+        scalar angle, pitch;
+        ss >> origin >> radius >> normal >> angle >> pitch;
+        return (Curve*)new Spiral(origin, radius, normal, angle, pitch);
+    }
+    else if(type == "toroid")
+    {
+        vec3 origin, maj_radius, maj_normal;
+        scalar min_radius, maj_angle, pitch;
+        ss >> origin >> maj_radius >> maj_normal;
+        ss >> min_radius >> maj_angle >> pitch;
+
+        return (Curve*)new Toroid(origin, maj_radius, maj_normal, min_radius, maj_angle, pitch);
+    }
+    else throw "unknown curve type (must be line, arc, spiral, or toroid)";
+}
+
 int main(int argc, char *argv[])
 {
-    if(argc != 2)
-        return 1;
+    Gnuplot gp;
+    gp << "set view equal xyz";
 
-    Toroid toroid(vec3(0, 0, 0), vec3(1, 0, 0), vec3(0, 0, 1), 2 * M_PI, .1, atof(argv[1]));
-    Spiral solenoid(vec3(-1,0,0), vec3(0,1,0), vec3(1,0,0), 2*M_PI * 10, .2);
-    //LineSegment wire(vec3(0, -10, 0), vec3(0, 10, 0));
+    while(cin)
+    {
+        cout << "fieldviz> " << flush;
+        string line;
+        getline(cin, line);
 
-    add_charge(1, (Curve*) &toroid);
-    add_current(1, (Curve*) &solenoid);
-    //add_current(1, (Curve*) &wire);
+        all_lower(line);
 
-    dump_field(FieldType::E,
-               vec3(-3, -3, -1),
-               vec3(3, 3, 1),
-               .5);
+        /* parse */
+        stringstream ss(line);
 
-    stringstream ss;
-    ss << "curve.fld";
-    ofstream ofs(ss.str());
+        string cmd;
+        ss >> cmd;
 
-    dump_paths(ofs, entities);
+        try {
+            if(cmd == "add")
+            {
+                /* add a current or charge distribution */
+                Entity e;
 
-    ofs.close();
+                string type;
+                ss >> type;
 
+                /* union */
+                double val;
+                ss >> val;
+
+                Curve *path = parse_curve(ss);
+
+                cout << "Curve type: " << typeid(*path).name() << endl;
+
+                int idx;
+                if(type == "i")
+                    idx = add_current(val, path);
+                else if(type == "q")
+                    idx = add_charge(val, path);
+                else throw "unknown distribution type (must be I or Q)";
+
+                cout << "Index: " << idx << endl;
+            }
+            else if(cmd == "plot")
+            {
+                string type;
+
+                vec3 lower, upper;
+                scalar delta;
+
+                if(!(ss >> type >> lower >> upper >> delta))
+                    throw "plot requires <lower> <upper> delta";
+
+                FieldType t = (type == "e") ? FieldType::E : FieldType::B;
+
+                ofstream out;
+                string fname = gp.create_tmpfile(out);
+
+                dump_field(out,
+                           t,
+                           lower, upper, delta);
+
+                out.close();
+
+                string cmd = "splot '" + fname + "' w vectors";
+                gp << cmd;
+            }
+        } catch(const char *err) {
+            cerr << "parse error: " << err << endl;
+        }
+    }
 
     //LineSegment wire(vec3(0, -100, 0), vec3(0, 100, 0));
 
