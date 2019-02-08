@@ -15,7 +15,8 @@ using namespace std;
 
 /* A current or charge distribution */
 struct Entity {
-    enum { CHARGE, CURRENT } type;
+    /* can bitwise-OR together */
+    enum { CHARGE = 1 << 0, CURRENT = 1 << 1 } type;
     union {
         scalar Q_density; /* linear charge density */
         scalar I; /* current */
@@ -110,7 +111,6 @@ ostream *dump_ofs = NULL;
 vec3 dump(vec3 s, vec3 ds)
 {
     *dump_ofs << s << " " << ds << endl;
-    //cout << "Magn: " << ds.magnitude() << endl;
 
     return 0;
 }
@@ -121,19 +121,27 @@ void dump_path(ostream &out, Curve *c)
     c->integrate(dump, D);
 }
 
-void dump_paths(ostream &out, vector<Entity> &e)
+int dump_entities(ostream &out, int which, vector<Entity> &e)
 {
+    int count = 0;
     for(int i = 0; i < e.size(); i++)
     {
-        dump_path(out, e[i].path);
+        if(which & e[i].type)
+        {
+            dump_path(out, e[i].path);
 
-        /* two blank lines mark an index in gnuplot */
-        out << endl << endl;
+            /* two blank lines mark an index in gnuplot */
+            out << endl << endl;
+
+            count++;
+        }
     }
+    return count;
 }
 
 /* dump the field vectors with a spacing of `delta' */
 /* requires x0 < x1, y0 < y1, z0 < z1 */
+
 enum FieldType { E, B };
 
 /* dump field in a region of space to vectors */
@@ -188,6 +196,13 @@ void all_lower(string &str)
         str[i] = tolower(str[i]);
 }
 
+string itoa(int n)
+{
+    stringstream ss;
+    ss << n;
+    return ss.str();
+}
+
 Curve *parse_curve(stringstream &ss)
 {
     string type;
@@ -220,15 +235,44 @@ Curve *parse_curve(stringstream &ss)
         ss >> origin >> maj_radius >> maj_normal;
         ss >> min_radius >> maj_angle >> pitch;
 
-        return (Curve*)new Toroid(origin, maj_radius, maj_normal, min_radius, maj_angle, pitch);
+        return (Curve*)new Toroid(origin, maj_radius, maj_normal, maj_angle, min_radius, pitch);
     }
     else throw "unknown curve type (must be line, arc, spiral, or toroid)";
 }
 
+void print_help()
+{
+    cout << endl;
+    cout << "fieldviz 0.1" << endl;
+    cout << "Copyright (C) 2019 Franklin Wei" << endl << endl;
+
+    cout << "Commands:" << endl;
+    cout << "  add {I CURRENT|Q DENSITY} CURVE" << endl;
+    cout << "    Add an entity of the specified type and the shape CURVE, where CURVE is one" << endl;
+    cout << "    of (<X> is a 3-tuple specifying a vector):" << endl;
+    cout << "      line <a> <b>" << endl;
+    cout << "      arc <center> <radius> <normal> angle" << endl;
+    cout << "      solenoid <center> <radius> <normal> angle pitch" << endl;
+    cout << "      toroid <center> <radius> <maj_normal> min_radius maj_angle pitch" << endl;
+    cout << endl;
+    cout << "  draw [I|Q] ..." << endl;
+    cout << "    Draw the specified current/charge distributions" << endl;
+    cout << endl;
+    cout << "  field [E|B] <lower_corner> <upper_corner> DELTA" << endl;
+    cout << "    Plot the E or B field in the rectangular prism bounded by lower and upper." << endl;
+    cout << "    DELTA specifies density." << endl;
+}
+
 int main(int argc, char *argv[])
 {
+    Toroid loop(vec3(0, 0, 0), vec3(1, 0, 0), vec3(0, 0, 1), M_PI * 2, .1, 2*M_PI / 10);
+    //add_current(1, (Curve*)&loop);
+
     Gnuplot gp;
     gp << "set view equal xyz";
+
+    cout << "Welcome to fieldviz!" << endl << endl;
+    cout << "Type `help' for a command listing." << endl;
 
     while(cin)
     {
@@ -259,7 +303,7 @@ int main(int argc, char *argv[])
 
                 Curve *path = parse_curve(ss);
 
-                cout << "Curve type: " << typeid(*path).name() << endl;
+                cout << "Curve type: " << path->name() << endl;
 
                 int idx;
                 if(type == "i")
@@ -270,7 +314,7 @@ int main(int argc, char *argv[])
 
                 cout << "Index: " << idx << endl;
             }
-            else if(cmd == "plot")
+            else if(cmd == "field")
             {
                 string type;
 
@@ -278,7 +322,7 @@ int main(int argc, char *argv[])
                 scalar delta;
 
                 if(!(ss >> type >> lower >> upper >> delta))
-                    throw "plot requires <lower> <upper> delta";
+                    throw "plot requires <E/B> <lower> <upper> delta";
 
                 FieldType t = (type == "e") ? FieldType::E : FieldType::B;
 
@@ -294,6 +338,38 @@ int main(int argc, char *argv[])
                 string cmd = "splot '" + fname + "' w vectors";
                 gp << cmd;
             }
+            else if(cmd == "draw")
+            {
+                int e_types = 0;
+
+                while(ss)
+                {
+                    string type_str;
+                    if(ss >> type_str)
+                    {
+                        if(type_str == "i")
+                            e_types |= Entity::CURRENT;
+                        else if(type_str == "q")
+                            e_types |= Entity::CHARGE;
+                        else
+                            throw "unknown entity type (must be I or Q)";
+                    }
+                }
+
+                if(!e_types)
+                    e_types |= Entity::CHARGE | Entity::CURRENT;
+
+                ofstream out;
+                string fname = gp.create_tmpfile(out);
+                int n = dump_entities(out, e_types,
+                                      entities);
+                out.close();
+
+                string cmd = "splot for[i = 0:" + itoa(n - 1) + "] '" + fname + "' i i w lines";
+                gp << cmd;
+            }
+            else if(cmd == "help")
+                print_help();
         } catch(const char *err) {
             cerr << "parse error: " << err << endl;
         }
