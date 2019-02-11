@@ -1,10 +1,14 @@
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <vector>
+
+#include <readline/readline.h>
+#include <readline/history.h>
 
 #include "gnuplot_i.hpp"
 
@@ -268,18 +272,32 @@ int main(int argc, char *argv[])
     Toroid loop(vec3(0, 0, 0), vec3(1, 0, 0), vec3(0, 0, 1), M_PI * 2, .1, 2*M_PI / 10);
     //add_current(1, (Curve*)&loop);
 
-    Gnuplot gp;
-    gp << "set view equal xyz";
+    Gnuplot *gp = NULL;
+
+    try {
+        gp = new Gnuplot();
+    }
+    catch(GnuplotException e) {
+        Gnuplot::set_terminal_std("dumb");
+        gp = new Gnuplot();
+    }
+
+    *gp << "set view equal xyz";
 
     cout << "Welcome to fieldviz!" << endl << endl;
     cout << "Type `help' for a command listing." << endl;
 
-    while(cin)
+    while(1)
     {
-        cout << "fieldviz> " << flush;
-        string line;
-        getline(cin, line);
+        char *cs = readline("fieldviz> ");
+        if(!cs)
+            return 0;
+        add_history(cs);
+        
+        string line(cs);
 
+        free(cs);
+        
         all_lower(line);
 
         /* parse */
@@ -327,7 +345,7 @@ int main(int argc, char *argv[])
                 FieldType t = (type == "e") ? FieldType::E : FieldType::B;
 
                 ofstream out;
-                string fname = gp.create_tmpfile(out);
+                string fname = gp->create_tmpfile(out);
 
                 dump_field(out,
                            t,
@@ -336,7 +354,7 @@ int main(int argc, char *argv[])
                 out.close();
 
                 string cmd = "splot '" + fname + "' w vectors";
-                gp << cmd;
+                *gp << cmd;
             }
             else if(cmd == "draw")
             {
@@ -360,13 +378,13 @@ int main(int argc, char *argv[])
                     e_types |= Entity::CHARGE | Entity::CURRENT;
 
                 ofstream out;
-                string fname = gp.create_tmpfile(out);
+                string fname = gp->create_tmpfile(out);
                 int n = dump_entities(out, e_types,
                                       entities);
                 out.close();
 
                 string cmd = "splot for[i = 0:" + itoa(n - 1) + "] '" + fname + "' i i w lines";
-                gp << cmd;
+                *gp << cmd;
             }
             else if(cmd == "help")
                 print_help();
