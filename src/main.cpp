@@ -12,9 +12,10 @@
 
 #include "gnuplot_i.hpp"
 
-#include "vec3.h"
 #include "curve.h"
+#include <fml/fml.h>
 
+using namespace fml;
 using namespace std;
 
 /* A current or charge distribution */

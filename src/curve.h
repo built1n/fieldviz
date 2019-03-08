@@ -3,8 +3,8 @@
 
 #include <cmath>
 #include <iostream>
-#include "vec3.h"
-#include "quat.h"
+#include <fml/fml.h>
+using namespace fml;
 
 /* All curves inherit this class */
 class Curve {
