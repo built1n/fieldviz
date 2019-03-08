@@ -79,7 +79,7 @@ const scalar U0 = 4e-7 * M_PI;
 const scalar C = 299792458;
 const scalar E0 = 1 / ( U0 * C * C );
 const scalar K_E = 1 / (4 * M_PI * E0);
-const scalar D = 1e-1;
+const scalar D = 1e-2;
 
 vec3 calc_Bfield(vec3 x)
 {
