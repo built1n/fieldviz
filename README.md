@@ -43,20 +43,20 @@ plot the electric/magnetic fields they produce with the "field" command.
 
 1. Line segment
 
-    line <a> <b>
+    line [a] [b]
 
 Pretty self-explanatory.
 
 2. Arc
 
-    arc <center> <radius> <normal> angle
+    arc [center] [radius] [normal] angle
 
 center, radius, and normal are all vectors. Normal should be
 normalized, or bad things might happen. Angle is the extent in radians.
 
 3. Solenoid
 
-   solenoid <center> <radius> <normal> angle pitch
+   solenoid [center] [radius] [normal] angle pitch
 
 The first four parameters have the same meaning as they do with
 arcs. The pitch parameter controls the linear distance between
@@ -64,7 +64,7 @@ successive turns.
 
 4. Toroid
 
-   toroid <center> <radius> <maj_normal> min_radius maj_angle pitch
+   toroid [center] [radius] [maj_normal] min_radius maj_angle pitch
 
 center and radius have the same meaning as before. See the diagram
 below for the meanings of the rest.
