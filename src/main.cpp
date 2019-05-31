@@ -1,11 +1,12 @@
 #include <cmath>
+#include <csignal>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <vector>
 
 #include <readline/readline.h>
 #include <readline/history.h>
@@ -13,7 +14,11 @@
 #include "gnuplot_i.hpp"
 
 #include "curve.h"
+#include "surface.h"
 #include <fml/fml.h>
+
+// under $HOME
+#define HISTORY_FILE ".fieldviz_history"
 
 using namespace fml;
 using namespace std;
@@ -27,7 +32,7 @@ struct Entity {
         scalar I; /* current */
     };
 
-    Curve *path;
+    Manifold *path;
 };
 
 vec3 point;
@@ -56,30 +61,31 @@ vec3 dE(vec3 s, vec3 ds)
     return rnorm * ds.magnitude() / r2;
 }
 
-vector<Entity> entities;
+int ent_counter = 0;
+map<int, Entity> entities;
 
-int add_current(scalar I, Curve *path)
+int add_entity(Entity e)
 {
-    Entity n = { Entity::CURRENT, I, path };
-    entities.push_back(n);
-
-    /* index */
-    return entities.size() - 1;
+    entities[ent_counter] = e;
+    return ent_counter++;
 }
 
-int add_charge(scalar Q_density, Curve *path)
+int add_current(scalar I, Manifold *path)
 {
-    Entity n = { Entity::CHARGE, Q_density, path };
-    entities.push_back(n);
+    return add_entity((Entity){ Entity::CURRENT, I, path });
+}
 
-    return entities.size() - 1;
+int add_charge(scalar Q_density, Manifold *path)
+{
+    return add_entity((Entity){ Entity::CHARGE, Q_density, path });
 }
 
 const scalar U0 = 4e-7 * M_PI;
 const scalar C = 299792458;
 const scalar E0 = 1 / ( U0 * C * C );
 const scalar K_E = 1 / (4 * M_PI * E0);
-const scalar D = 1e-2;
+const scalar DEFAULT_D = 1e-1;
+scalar D = DEFAULT_D;
 
 vec3 calc_Bfield(vec3 x)
 {
@@ -87,10 +93,11 @@ vec3 calc_Bfield(vec3 x)
 
     vec3 B = 0;
 
-    for(int i = 0; i < entities.size(); i++)
+    for(map<int, Entity>::iterator i = entities.begin(); i != entities.end(); i++)
     {
-        if(entities[i].type == Entity::CURRENT)
-            B += entities[i].path->integrate(dB, D) * U0 * entities[i].I;
+        Entity &e = i->second;
+        if(e.type == Entity::CURRENT)
+            B += e.path->integrate(dB, D) * U0 * e.I;
     }
 
     return B;
@@ -102,10 +109,11 @@ vec3 calc_Efield(vec3 x)
 
     vec3 E = 0;
 
-    for(int i = 0; i < entities.size(); i++)
+    for(map<int, Entity>::iterator i = entities.begin(); i != entities.end(); i++)
     {
-        if(entities[i].type == Entity::CHARGE)
-            E += entities[i].path->integrate(dE, D) * K_E * entities[i].Q_density;
+        Entity &e = i->second;
+        if(e.type == Entity::CHARGE)
+            E += e.path->integrate(dE, D) * K_E * e.Q_density;
     }
 
     return E;
@@ -120,20 +128,21 @@ vec3 dump(vec3 s, vec3 ds)
     return 0;
 }
 
-void dump_path(ostream &out, Curve *c)
+void dump_points(ostream &out, Manifold *c)
 {
     dump_ofs = &out;
     c->integrate(dump, D);
 }
 
-int dump_entities(ostream &out, int which, vector<Entity> &e)
+int dump_entities(ostream &out, int which, map<int, Entity> &en)
 {
     int count = 0;
-    for(int i = 0; i < e.size(); i++)
+    for(map<int, Entity>::iterator i = en.begin(); i != en.end(); i++)
     {
-        if(which & e[i].type)
+        Entity &e = i->second;
+        if(which & e.type)
         {
-            dump_path(out, e[i].path);
+            dump_points(out, e.path);
 
             /* two blank lines mark an index in gnuplot */
             out << endl << endl;
@@ -141,6 +150,7 @@ int dump_entities(ostream &out, int which, vector<Entity> &e)
             count++;
         }
     }
+
     return count;
 }
 
@@ -189,8 +199,6 @@ void dump_values(vec3 start, vec3 del, int times)
     point = start;
     while(times--)
     {
-
-
         point += del;
     }
 }
@@ -208,7 +216,7 @@ string itoa(int n)
     return ss.str();
 }
 
-Curve *parse_curve(stringstream &ss)
+Manifold *parse_curve(stringstream &ss)
 {
     string type;
     ss >> type;
@@ -242,6 +250,41 @@ Curve *parse_curve(stringstream &ss)
 
         return (Curve*)new Toroid(origin, maj_radius, maj_normal, maj_angle, min_radius, pitch);
     }
+    else if(type == "plane")
+    {
+        vec3 origin, v1, v2;
+        ss >> origin >> v1 >> v2;
+        return (Surface*)new Plane(origin, v1, v2);
+    }
+    else if(type == "disk")
+    {
+        vec3 center, radius, normal;
+        scalar angle;
+        ss >> center >> radius >> normal >> angle;
+        return (Surface*)new Disk(center, radius, normal, angle);
+    }
+    else if(type == "sphere")
+    {
+        vec3 center;
+        scalar radius;
+        ss >> center >> radius;
+
+        return (Surface*)new Sphere(center, radius);
+    }
+    else if(type == "opencylinder")
+    {
+        vec3 origin, axis;
+        scalar rad;
+        ss >> origin >> axis >> rad;
+        return (Surface*)new OpenCylinder(origin, axis, rad);
+    }
+    else if(type == "closedcylinder")
+    {
+        vec3 origin, axis;
+        scalar rad;
+        ss >> origin >> axis >> rad;
+        return (Surface*)new ClosedCylinder(origin, axis, rad);
+    }
     else throw "unknown curve type (must be line, arc, spiral, or toroid)";
 }
 
@@ -252,13 +295,21 @@ void print_help()
     cout << "Copyright (C) 2019 Franklin Wei" << endl << endl;
 
     cout << "Commands:" << endl;
-    cout << "  add {I CURRENT|Q DENSITY} CURVE" << endl;
-    cout << "    Add an entity of the specified type and the shape CURVE, where CURVE is one" << endl;
+    cout << "  add {I CURRENT|Q DENSITY} MANIFOLD" << endl;
+    cout << "    Add an entity of the specified type and the shape MANIFOLD, which can be:" << endl;
     cout << "    of (<X> is a 3-tuple specifying a vector):" << endl;
+    cout << "     1-manifolds:" << endl;
     cout << "      line <a> <b>" << endl;
     cout << "      arc <center> <radius> <normal> angle" << endl;
     cout << "      solenoid <center> <radius> <normal> angle pitch" << endl;
     cout << "      toroid <center> <radius> <maj_normal> min_radius maj_angle pitch" << endl;
+    cout << "     2-manifolds:" << endl;
+    cout << "      plane <origin> <vec1> <vec2>" << endl;
+    cout << "      disk <center> <radius> <normal> angle" << endl;
+    cout << "      sphere <center> radius" << endl;
+    cout << endl;
+    cout << "  delete [ID..]" << endl;
+    cout << "    Delete an entity by its previously returned identifier." << endl;
     cout << endl;
     cout << "  draw [I|Q] ..." << endl;
     cout << "    Draw the specified current/charge distributions" << endl;
@@ -266,16 +317,51 @@ void print_help()
     cout << "  field [E|B] <lower_corner> <upper_corner> DELTA" << endl;
     cout << "    Plot the E or B field in the rectangular prism bounded by lower and upper." << endl;
     cout << "    DELTA specifies density." << endl;
+    cout << endl;
+    cout << "  newwindow" << endl;
+    cout << "    Make future plots go into a new window" << endl;
+    cout << endl;
+    cout << "  delta D" << endl;
+    cout << "    Set integration fineness to D (smaller is better but slower)" << endl;
+}
+
+vec3 dA(vec3 s, vec3 dA)
+{
+    /* will cast to vec3 */
+    return dA.magnitude();
+}
+
+string hist_path;
+
+void exit_handler()
+{
+    write_history(hist_path.c_str());
+}
+
+void int_handler(int a)
+{
+    (void) a;
+    exit(0);
 }
 
 int main(int argc, char *argv[])
 {
-    Toroid loop(vec3(0, 0, 0), vec3(1, 0, 0), vec3(0, 0, 1), M_PI * 2, .1, 2*M_PI / 10);
-    //add_current(1, (Curve*)&loop);
+    Surface *surf = new Sphere(vec3(0, 0, 1), 1);
+    cout << "Area of 10x10 square = " << surf->integrate(dA, D) << endl;
+
+    hist_path = getenv("HOME");
+    hist_path += "/";
+    hist_path += HISTORY_FILE;
+
+    using_history();
+    read_history(hist_path.c_str());
+    atexit(exit_handler);
+    signal(SIGINT, int_handler);
 
     Gnuplot *gp = NULL;
 
     try {
+        Gnuplot::set_terminal_std("qt");
         gp = new Gnuplot();
     }
     catch(GnuplotException e) {
@@ -288,17 +374,20 @@ int main(int argc, char *argv[])
     cout << "Welcome to fieldviz!" << endl << endl;
     cout << "Type `help' for a command listing." << endl;
 
+    /* will change to replot on subsequent commands */
+    string plot_cmd = "splot";
+
     while(1)
     {
         char *cs = readline("fieldviz> ");
         if(!cs)
             return 0;
         add_history(cs);
-        
+
         string line(cs);
 
         free(cs);
-        
+
         all_lower(line);
 
         /* parse */
@@ -320,9 +409,9 @@ int main(int argc, char *argv[])
                 double val;
                 ss >> val;
 
-                Curve *path = parse_curve(ss);
+                Manifold *path = parse_curve(ss);
 
-                cout << "Curve type: " << path->name() << endl;
+                cout << "Manifold type: " << path->name() << endl;
 
                 int idx;
                 if(type == "i")
@@ -332,6 +421,17 @@ int main(int argc, char *argv[])
                 else throw "unknown distribution type (must be I or Q)";
 
                 cout << "Index: " << idx << endl;
+            }
+            else if(cmd == "delete")
+            {
+                int id;
+                while(ss >> id)
+                {
+                    if(entities.erase(id))
+                        cout << "Deleted " << id << "." << endl;
+                    else
+                        cerr << "No entity " << id << "!" << endl;
+                }
             }
             else if(cmd == "field")
             {
@@ -354,8 +454,10 @@ int main(int argc, char *argv[])
 
                 out.close();
 
-                string cmd = "splot '" + fname + "' w vectors";
+                string cmd = plot_cmd + " '" + fname + "' w vectors";
                 *gp << cmd;
+
+                plot_cmd = "replot";
             }
             else if(cmd == "draw")
             {
@@ -384,11 +486,28 @@ int main(int argc, char *argv[])
                                       entities);
                 out.close();
 
-                string cmd = "splot for[i = 0:" + itoa(n - 1) + "] '" + fname + "' i i w lines";
+                string cmd = plot_cmd + " for[i = 0:" + itoa(n - 1) + "] '" + fname + "' i i w vectors";
                 *gp << cmd;
+
+                plot_cmd = "replot";
+            }
+            else if(cmd == "delta")
+            {
+                ss >> D;
+                if(D <= 0)
+                {
+                    cerr << "D must be positive and non-zero!" << endl;
+                    D = DEFAULT_D;
+                }
+            }
+            else if(cmd == "newwindow")
+            {
+                plot_cmd = "splot";
             }
             else if(cmd == "help")
                 print_help();
+            else
+                cerr << "invalid" << endl;
         } catch(const char *err) {
             cerr << "parse error: " << err << endl;
         }

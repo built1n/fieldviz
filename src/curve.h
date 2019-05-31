@@ -4,16 +4,19 @@
 #include <cmath>
 #include <iostream>
 #include <fml/fml.h>
+
+#include "manifold.h"
+
 using namespace fml;
 
-/* All curves inherit this class */
-class Curve {
+/* All curves inherit this class (which is empty because Manifold has
+ * everything we need). */
+class Curve : public Manifold {
 public:
-    virtual vec3 integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar delta) const = 0;
-    virtual const char *name() const = 0;
+    const int dimension() const { return 1; }
 };
 
-class LineSegment : Curve {
+class LineSegment : public Curve {
 private:
     vec3 a, b;
 public:
@@ -28,7 +31,7 @@ public:
 
 std::istream operator>>(std::istream &is, LineSegment &ls);
 
-class Arc : Curve {
+class Arc : public Curve {
 private:
     vec3 center;
 
@@ -50,7 +53,7 @@ public:
 
 std::istream operator>>(std::istream &is, LineSegment &ls);
 
-class Spiral : Curve {
+class Spiral : public Curve {
 private:
     vec3 origin;
 
@@ -75,7 +78,7 @@ public:
 
 std::istream operator>>(std::istream &is, LineSegment &ls);
 
-class Toroid : Curve {
+class Toroid : public Curve {
 private:
     vec3 origin;
 

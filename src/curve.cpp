@@ -31,7 +31,7 @@ vec3 Arc::integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar dl) const
 
     //cout << "R = " << r << ", dtheta = " << dtheta << endl;
 
-    quat rot = quat::from_angleaxis(dtheta, normal), crot = rot.conjugate();
+    quat rot = quat::from_angleaxis(dtheta, normal);
 
     //cout << "rot = " << rot << ", crot = " << crot << endl;
 
@@ -46,15 +46,13 @@ vec3 Arc::integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar dl) const
         vec3 ds = this->normal.cross(radius).normalize() * dl;
         sum += integrand(this->center + radius, ds);
 
-        radius = rot * radius * crot;
+        radius = radius.rotateby(rot);
     }
 
     if(l < len)
     {
         dl = len - l;
         dtheta = dl / r;
-        rot = quat::from_angleaxis(dtheta, normal);
-        crot = rot.conjugate();
 
         vec3 ds = this->normal.cross(radius).normalize() * dl;
         sum += integrand(this->center + radius, ds);
@@ -71,7 +69,7 @@ vec3 Spiral::integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar dl) const
 
     //cout << "R = " << r << ", dtheta = " << dtheta << endl;
 
-    quat rot = quat::from_angleaxis(dtheta, normal), crot = rot.conjugate();
+    quat rot = quat::from_angleaxis(dtheta, normal);
 
     //cout << "rot = " << rot << ", crot = " << crot << endl;
 
@@ -94,15 +92,13 @@ vec3 Spiral::integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar dl) const
         sum += integrand(this->origin + axis + radius, ds);
 
         /* rotate by dtheta about normal */
-        radius = rot * radius * crot;
+        radius = radius.rotateby(rot);
     }
 
     if(l < len)
     {
         dl = len - l;
         dtheta = dl / r;
-        rot = quat::from_angleaxis(dtheta, normal);
-        crot = rot.conjugate();
         dp = this->normal * dtheta * pitch / (2 * M_PI);
 
         vec3 ds = this->normal.cross(radius).normalize() * dl + dp;
@@ -137,9 +133,9 @@ vec3 Toroid::integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar dl) const
     vec3 minor_normal = this->major_normal.cross(this->major_radius).normalize();
 
     /* quaternion describing rotation of minor vector */
-    quat minor_rot = quat::from_angleaxis(minor_dtheta, minor_normal), minor_crot = minor_rot.conjugate();
+    quat minor_rot = quat::from_angleaxis(minor_dtheta, minor_normal);
 
-    quat major_rot = quat::from_angleaxis(major_dtheta, major_normal), major_crot = major_rot.conjugate();
+    quat major_rot = quat::from_angleaxis(major_dtheta, major_normal);
 
     vec3 sum = 0;
 
@@ -163,13 +159,12 @@ vec3 Toroid::integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar dl) const
          * radius */
         /* we also need to rotate the minor radius rotation quaternion
          * about the origin */
-        major_radius = major_rot * major_radius * major_crot;
-        minor_normal = major_rot * minor_normal * major_crot;
+        major_radius = major_radius.rotateby(major_rot);
+        minor_normal = minor_normal.rotateby(major_rot);
 
-        minor_radius = minor_rot * minor_radius * minor_crot;
+        minor_radius = minor_radius.rotateby(minor_rot);
 
         minor_rot = quat::from_angleaxis(minor_dtheta, minor_normal);
-        minor_crot = minor_rot.conjugate();
         //minor_rot = major_rot * minor_rot;
         //minor_crot = minor_rot.conjugate();
 
@@ -193,4 +188,3 @@ vec3 Toroid::integrate(vec3 (*integrand)(vec3 s, vec3 ds), scalar dl) const
 
     return sum;
 }
-
