@@ -13,8 +13,6 @@
 
 #include "gnuplot_i.hpp"
 
-#include "curve.h"
-#include "surface.h"
 #include <fml/fml.h>
 
 // under $HOME
